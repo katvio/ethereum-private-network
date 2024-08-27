@@ -1,0 +1,13 @@
+  - name: Reload systemd
+    systemd:
+      daemon_reload: yes
+
+  - name: Restart Node Exporter
+    systemd:
+      name: node_exporter
+      state: restarted
+
+  - name: Restart Promtail
+    systemd:
+      name: promtail
+      state: restarted

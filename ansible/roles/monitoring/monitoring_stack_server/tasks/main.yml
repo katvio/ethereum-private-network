@@ -1,0 +1,110 @@
+---
+- name: Stop and remove existing monitoring containers
+  docker_compose:
+    project_src: /opt/monitoring
+    state: absent
+  ignore_errors: yes
+
+- name: Remove old Docker volumes
+  command: docker volume rm monitoring_grafana_data monitoring_prometheus_data monitoring_loki_data
+  ignore_errors: yes
+
+- name: Create monitoring directory
+  file:
+    path: /opt/monitoring
+    state: directory
+    mode: '0755'
+
+- name: Create Docker Compose file
+  template:
+    src: docker-compose.yml.j2
+    dest: /opt/monitoring/docker-compose.yml
+    mode: '0644'
+
+- name: Create configuration files
+  template:
+    src: "{{ item.src }}"
+    dest: "/opt/monitoring/{{ item.dest }}"
+    mode: '0644'
+  loop:
+    - { src: "prometheus.yml.j2", dest: "prometheus.yml" }
+    - { src: "alertmanager.yml.j2", dest: "alertmanager.yml" }
+    - { src: "loki-config.yml.j2", dest: "loki-config.yml" }
+
+- name: Get current user UID and GID
+  set_fact:
+    ansible_user_uid: "{{ ansible_user_uid | default(ansible_user_id) }}"
+    ansible_user_gid: "{{ ansible_user_gid | default(ansible_user_gid) }}"
+
+- name: Ensure Loki data directory exists with correct permissions
+  file:
+    path: /opt/monitoring/loki_data
+    state: directory
+    mode: '0755'
+    owner: "{{ ansible_user_uid }}"
+    group: "{{ ansible_user_gid }}"
+
+- name: Start monitoring services
+  docker_compose:
+    project_src: /opt/monitoring
+    state: present
+  register: output
+
+- debug:
+    var: output
+
+- name: Wait for Grafana to be ready
+  uri:
+    url: "http://localhost:3000/api/health"
+    status_code: 200
+  register: result
+  until: result.status == 200
+  retries: 60
+  delay: 1
+
+- name: Add Loki data source to Grafana
+  uri:
+    url: "http://localhost:3000/api/datasources"
+    method: POST
+    body_format: json
+    body:
+      name: "Loki"
+      type: "loki"
+      url: "http://loki:3100"
+      access: "proxy"
+      isDefault: true
+      jsonData:
+        tlsSkipVerify: true
+    headers:
+      Content-Type: "application/json"
+    status_code: 200, 409  # 409 is returned if the data source already exists
+  register: grafana_datasource
+
+- name: Add Prometheus data source to Grafana
+  uri:
+    url: "http://localhost:3000/api/datasources"
+    method: POST
+    body_format: json
+    body:
+      name: "Prometheus"
+      type: "prometheus"
+      url: "http://prometheus:9090"
+      access: "proxy"
+      isDefault: true
+      jsonData:
+        tlsSkipVerify: true
+    headers:
+      Content-Type: "application/json"      
+    status_code: 200, 409  # 409 is returned if the data source already exists
+  register: grafana_prometheus_datasource
+
+# - name: Open required ports
+#   ufw:
+#     rule: allow
+#     port: "{{ item }}"
+#   loop:
+#     - "3000"  # Grafana
+#     - "9090"  # Prometheus
+#     - "9093"  # Alertmanager
+#     - "3100"  # Loki
+#     - "24224" # Fluentd

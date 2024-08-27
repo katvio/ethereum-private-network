@@ -1,0 +1,5 @@
+- name: Restart Ethereum node
+  docker_compose:
+    project_src: /opt/ethereum
+    state: present
+    restarted: yes

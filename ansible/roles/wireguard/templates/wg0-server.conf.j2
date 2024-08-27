@@ -1,0 +1,10 @@
+[Interface]
+Address = {{ server_ip }}/24
+ListenPort = 51820
+PrivateKey = {{ wg_private_key }}
+
+{% for host in groups['ethereum_nodes'] %}
+[Peer]
+PublicKey = {{ hostvars[host]['wg_public_key'] }}
+AllowedIPs = 192.168.10.{{ loop.index + 1 }}/32
+{% endfor %}

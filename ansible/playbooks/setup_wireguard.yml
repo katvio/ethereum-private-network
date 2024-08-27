@@ -1,0 +1,91 @@
+---
+- name: Generate WireGuard keys
+  hosts: all
+  become: yes
+  tasks:
+    - name: Install WireGuard
+      apt:
+        name: wireguard
+        state: present
+        update_cache: yes
+
+    - name: Generate WireGuard private key
+      shell: wg genkey | tee /etc/wireguard/private.key | wg pubkey > /etc/wireguard/public.key
+      args:
+        creates: /etc/wireguard/private.key
+
+    - name: Read WireGuard private key
+      slurp:
+        src: /etc/wireguard/private.key
+      register: wg_private_key_content
+
+    - name: Read WireGuard public key
+      slurp:
+        src: /etc/wireguard/public.key
+      register: wg_public_key_content
+
+    - name: Set facts for keys
+      set_fact:
+        wg_private_key: "{{ wg_private_key_content.content | b64decode | trim }}"
+        wg_public_key: "{{ wg_public_key_content.content | b64decode | trim }}"
+
+- name: Configure WireGuard server
+  hosts: monitoring
+  become: yes
+  vars:
+    server_ip: "192.168.10.1"
+  tasks:
+    - name: Enable IP forwarding
+      sysctl:
+        name: net.ipv4.ip_forward
+        value: '1'
+        sysctl_set: yes
+        state: present
+        reload: yes
+    
+    - name: Configure WireGuard server
+      template:
+        src: "../roles/wireguard/templates/wg0-server.conf.j2"
+        dest: /etc/wireguard/wg0.conf
+
+    - name: Enable WireGuard service
+      systemd:
+        name: wg-quick@wg0
+        enabled: yes
+        state: restarted
+
+    - name: Verify IP forwarding
+      command: sysctl net.ipv4.ip_forward
+      register: ip_forward_result
+      
+    - name: Display IP forwarding status
+      debug:
+        var: ip_forward_result.stdout
+
+- name: Configure WireGuard clients
+  hosts: ethereum_nodes
+  become: yes
+  vars:
+    server_public_key: "{{ hostvars[groups['monitoring'][0]]['wg_public_key'] }}"
+    server_ip: "192.168.10.1"
+  tasks:
+    - name: Configure WireGuard client
+      template:
+        src: "../roles/wireguard/templates/wg0-client.conf.j2"
+        dest: /etc/wireguard/wg0.conf
+
+    - name: Enable WireGuard service
+      systemd:
+        name: wg-quick@wg0
+        enabled: yes
+        state: restarted
+
+- name: Verify WireGuard connectivity
+  hosts: all
+  become: yes
+  tasks:
+    - name: Show WireGuard status
+      command: wg show
+      register: wg_status
+      changed_when: false
+

@@ -1,0 +1,9 @@
+[Interface]
+Address = 192.168.10.{{ groups['ethereum_nodes'].index(inventory_hostname) + 2 }}/24
+PrivateKey = {{ wg_private_key }}
+
+[Peer]
+PublicKey = {{ server_public_key }}
+Endpoint = {{ hostvars[groups['monitoring'][0]]['ansible_host'] }}:51820
+AllowedIPs = 192.168.10.0/24
+PersistentKeepalive = 25

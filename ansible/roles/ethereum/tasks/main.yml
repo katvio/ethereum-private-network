@@ -1,0 +1,201 @@
+---
+- name: Check if docker-compose.yml exists
+  stat:
+    path: /opt/ethereum/docker-compose.yml
+  register: compose_file
+
+- name: Stop running Ethereum nodes (except the bootnode)
+  docker_compose:
+    project_src: /opt/ethereum
+    state: absent
+  when: compose_file.stat.exists and inventory_hostname != groups['ethereum_nodes'][0]
+  ignore_errors: yes
+
+- name: Remove existing Ethereum data (except on the bootnode)
+  file:
+    path: /opt/ethereum
+    state: absent
+  when: inventory_hostname != groups['ethereum_nodes'][0]
+
+- name: Create Ethereum data directory
+  file:
+    path: /opt/ethereum
+    state: directory
+    mode: '0755'
+
+- name: Generate Ethereum account for each node
+  command: docker run --rm -v /opt/ethereum:/root/.ethereum ethereum/client-go:v1.10.1 account new --password /dev/null
+  register: ethereum_account
+
+- name: Set Ethereum address fact for each node
+  set_fact:
+    ethereum_address: "{{ ethereum_account.stdout | regex_search('0x[a-fA-F0-9]{40}') }}"
+
+- name: Debug - Display the generated Ethereum address
+  debug:
+    msg: "Generated Ethereum address for {{ inventory_hostname }}: {{ ethereum_address }}"
+
+- name: Create genesis.json file (only once on the bootnode)
+  template:
+    src: genesis.json.j2
+    dest: /opt/ethereum/genesis.json
+  run_once: true
+  delegate_to: "{{ groups['ethereum_nodes'][0] }}"
+
+- name: Copy genesis.json from bootnode to other nodes
+  fetch:
+    src: /opt/ethereum/genesis.json
+    dest: /tmp/
+    flat: yes
+  run_once: true
+  delegate_to: "{{ groups['ethereum_nodes'][0] }}"
+
+- name: Distribute genesis.json to all nodes
+  copy:
+    src: /tmp/genesis.json
+    dest: /opt/ethereum/genesis.json
+  when: inventory_hostname != groups['ethereum_nodes'][0]
+
+- name: Initialize Ethereum node with genesis block
+  command: >
+    docker run --rm 
+    -v /opt/ethereum:/root/.ethereum 
+    -v /tmp/ethereum-init:/tmp/ethereum-init 
+    ethereum/client-go:v1.10.1 
+    init 
+    --datadir /tmp/ethereum-init 
+    /root/.ethereum/genesis.json
+
+- name: Copy initialized data to Ethereum directory
+  command: cp -R /tmp/ethereum-init/geth /opt/ethereum/
+
+- name: Clean up temporary directory
+  file:
+    path: /tmp/ethereum-init
+    state: absent
+
+- name: Generate bootnode key (only once)
+  command: openssl rand -hex 32
+  register: bootnode_key
+  run_once: true
+  delegate_to: "{{ groups['ethereum_nodes'][0] }}"
+
+- name: Create bootnode key file (only on bootnode)
+  copy:
+    content: "{{ bootnode_key.stdout }}"
+    dest: "/opt/ethereum/bootnode.key"
+  run_once: true
+  delegate_to: "{{ groups['ethereum_nodes'][0] }}"
+
+- name: Read the content of bootnode key file contents
+  slurp:
+    path: /opt/ethereum/bootnode.key
+  register: slurped_compose_file
+  run_once: true
+  delegate_to: "{{ groups['ethereum_nodes'][0] }}"
+
+- name: Debug - Display bootnode key file contents
+  debug:
+    msg: "{{ slurped_compose_file.content | b64decode }}"
+  run_once: true
+  delegate_to: "{{ groups['ethereum_nodes'][0] }}"
+
+- name: Create docker-compose file for bootnode
+  template:
+    src: docker-compose-bootnode.yml.j2
+    dest: /opt/ethereum/docker-compose.yml
+  run_once: true
+  delegate_to: "{{ groups['ethereum_nodes'][0] }}"
+
+- name: Debug - Display docker-compose.yml contents for bootnode
+  slurp:
+    path: /opt/ethereum/docker-compose.yml
+  register: bootnode_compose_file
+  run_once: true
+  delegate_to: "{{ groups['ethereum_nodes'][0] }}"
+
+- name: Debug - Print out docker-compose.yml for bootnode
+  debug:
+    msg: "{{ bootnode_compose_file.content | b64decode }}"
+  run_once: true
+  delegate_to: "{{ groups['ethereum_nodes'][0] }}"
+
+- name: Start Ethereum bootnode
+  docker_compose:
+    project_src: /opt/ethereum
+    services:
+      - ethereum
+  run_once: true
+  delegate_to: "{{ groups['ethereum_nodes'][0] }}"
+
+- name: Wait for bootnode to start
+  wait_for:
+    timeout: 30
+  run_once: true
+  delegate_to: "{{ groups['ethereum_nodes'][0] }}"
+
+- name: Generate enode address
+  command: >
+    docker exec ethereum_ethereum_1 geth 
+    --exec "admin.nodeInfo.enode" 
+    attach /root/.ethereum/geth.ipc
+  register: enode_address
+  retries: 5
+  delay: 10
+  until: enode_address.rc == 0
+  run_once: true
+  delegate_to: "{{ groups['ethereum_nodes'][0] }}"
+  ignore_errors: yes
+
+- name: Debug enode address
+  debug:
+    var: enode_address
+  run_once: true
+
+- name: Set bootnode enode fact
+  set_fact:
+    bootnode_enode: "{{ enode_address.stdout | regex_replace('127.0.0.1', ansible_default_ipv4.address) | regex_replace('^\"(.*)\"$', '\\1') }}"
+  when: enode_address is success
+
+- name: Create docker-compose file for other nodes (normal nodes)
+  template:
+    src: docker-compose.yml.j2
+    dest: /opt/ethereum/docker-compose.yml
+
+- name: Debug - Display docker-compose.yml contents for normal nodes
+  slurp:
+    path: /opt/ethereum/docker-compose.yml
+  register: normalnode_compose_file
+
+- name: Debug - Print out docker-compose.yml for normal nodes
+  debug:
+    msg: "{{ normalnode_compose_file.content | b64decode }}"
+
+- name: Start all Ethereum normal nodes (excluding bootnode)
+  docker_compose:
+    project_src: /opt/ethereum
+    state: present
+  environment:
+    COMPOSE_HTTP_TIMEOUT: 300
+  when: inventory_hostname != groups['ethereum_nodes'][0]
+  register: compose_result
+
+- name: Debug - Display docker-compose up result for normal nodes
+  debug:
+    var: compose_result
+  when: inventory_hostname != groups['ethereum_nodes'][0]
+
+- name: Wait for normal nodes to start
+  wait_for:
+    timeout: 30
+
+- name: Check Ethereum node status
+  command: docker ps
+  register: docker_status
+
+- name: Debug - Display Docker status
+  debug:
+    var: docker_status.stdout_lines
+
+- name: Flush handlers
+  meta: flush_handlers

@@ -1,0 +1,22 @@
+---
+- name: Restart WireGuard on all nodes
+  hosts: all
+  become: yes
+  tasks:
+    - name: Restart WireGuard service
+      systemd:
+        name: wg-quick@wg0
+        state: restarted
+
+    - name: Wait for WireGuard to restart
+      pause:
+        seconds: 5
+
+    - name: Check WireGuard status
+      command: wg show
+      register: wg_status
+      changed_when: false
+
+    - name: Display WireGuard status
+      debug:
+        var: wg_status.stdout_lines

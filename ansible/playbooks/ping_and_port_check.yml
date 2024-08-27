@@ -1,0 +1,55 @@
+---
+- name: Ping and port check across all Ethereum nodes and monitoring machine
+  hosts: all
+  gather_facts: no
+  tasks:
+    - name: Define a list of all private IPs and WireGuard IPs in the inventory
+      set_fact:
+        all_private_ips: "{{ groups['all'] | map('extract', hostvars, 'private_ip_contabo_network') | list }}"
+        all_private_ips_wireguard: "{{ groups['all'] | map('extract', hostvars, 'private_ip_wireguard') | list }}"
+
+    - name: Ping other nodes' private IPs from each host
+      shell: ping -c 3 {{ item }}
+      with_items: "{{ all_private_ips }}"
+      when: item != hostvars[inventory_hostname]['private_ip_contabo_network']
+      register: ping_results
+
+    - name: Debug - Display ping results for private IPs
+      debug:
+        var: ping_results
+
+    - name: Ping other nodes' WireGuard IPs from each host
+      shell: ping -c 3 {{ item }}
+      with_items: "{{ all_private_ips_wireguard }}"
+      when: item != hostvars[inventory_hostname]['private_ip_wireguard']
+      register: ping_results_wireguard
+
+    - name: Debug - Display ping results for WireGuard IPs
+      debug:
+        var: ping_results_wireguard
+
+    - name: Check if port 30303 is open on each private IP
+      wait_for:
+        host: "{{ item }}"
+        port: 30303
+        timeout: 3
+      with_items: "{{ all_private_ips }}"
+      when: item != hostvars[inventory_hostname]['private_ip_contabo_network']
+      register: port_check_results
+
+    - name: Debug - Display port check results for private IPs
+      debug:
+        var: port_check_results
+
+    - name: Check if port 30303 is open on each WireGuard IP
+      wait_for:
+        host: "{{ item }}"
+        port: 30303
+        timeout: 3
+      with_items: "{{ all_private_ips_wireguard }}"
+      when: item != hostvars[inventory_hostname]['private_ip_wireguard']
+      register: port_check_results_wireguard
+
+    - name: Debug - Display port check results for WireGuard IPs
+      debug:
+        var: port_check_results_wireguard

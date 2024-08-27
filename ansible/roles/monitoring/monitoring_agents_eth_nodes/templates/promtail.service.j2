@@ -1,0 +1,12 @@
+[Unit]
+Description=Promtail
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+User=root
+ExecStart=/usr/local/bin/promtail-linux-amd64 -config.file=/etc/promtail-config.yml
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target

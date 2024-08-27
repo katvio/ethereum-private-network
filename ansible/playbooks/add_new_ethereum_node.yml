@@ -1,0 +1,59 @@
+---
+- name: Add New Ethereum Node
+  hosts: new_ethereum_node
+  become: yes
+  vars:
+    new_node_wireguard_ip: "192.168.10.{{ groups['ethereum_nodes'] | length + 2 }}"
+  roles:
+    - common
+    - wireguard
+    - ethereum
+    - monitoring/monitoring_agents_eth_nodes
+
+  tasks:
+    - name: Update inventory file
+      delegate_to: localhost
+      lineinfile:
+        path: "{{ playbook_dir }}/../inventory.yml"
+        line: "        node{{ groups['ethereum_nodes'] | length + 1 }}:"
+        insertafter: "    ethereum_nodes:"
+      
+    - name: Add new node details to inventory
+      delegate_to: localhost
+      blockinfile:
+        path: "{{ playbook_dir }}/../inventory.yml"
+        insertafter: "        node{{ groups['ethereum_nodes'] | length + 1 }}:"
+        block: |
+          ansible_host: {{ ansible_host }}
+          private_ip_wireguard: {{ new_node_wireguard_ip }}
+          private_ip_contabo_network: {{ ansible_default_ipv4.address }}
+
+    - name: Update WireGuard configuration on all nodes
+      include_role:
+        name: wireguard
+      vars:
+        update_peers: true
+
+    - name: Restart WireGuard on new node
+      systemd:
+        name: wg-quick@wg0
+        state: restarted
+
+    - name: Update Prometheus configuration
+      delegate_to: "{{ groups['monitoring'][0] }}"
+      template:
+        src: "{{ playbook_dir }}/../roles/monitoring/monitoring_stack_server/templates/prometheus.yml.j2"
+        dest: "/opt/monitoring/prometheus.yml"
+      
+    - name: Restart Prometheus
+      delegate_to: "{{ groups['monitoring'][0] }}"
+      docker_compose:
+        project_src: /opt/monitoring
+        services:
+          - prometheus
+        restarted: yes
+
+    - name: Wait for new node to sync
+      wait_for:
+        timeout: 300
+      delegate_to: localhost

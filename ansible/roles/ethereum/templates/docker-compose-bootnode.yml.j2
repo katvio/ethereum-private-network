@@ -1,0 +1,31 @@
+version: '3'
+services:
+  ethereum:
+    image: ethereum/client-go:v1.10.1
+    command:
+      - --networkid={{ ethereum_network_id }}
+      - --datadir=/root/.ethereum
+      - --port=30303
+      - --http
+      - --http.addr=0.0.0.0
+      - --http.port=8545
+      - --http.api=eth,net,web3,personal,admin
+      - --http.corsdomain=*
+      - --http.vhosts=*
+      - --ipcpath=/root/.ethereum/geth.ipc
+      - --nodekeyhex={{ bootnode_key.stdout }}
+      - --metrics.addr=0.0.0.0
+      - --metrics
+      - --mine
+      - --miner.etherbase={{ hostvars[groups['ethereum_nodes'][0]]['ethereum_address'] }}
+      - --verbosity=4
+      - --allow-insecure-unlock
+    volumes:
+      - /opt/ethereum:/root/.ethereum
+    ports:
+      - "30303:30303/tcp"
+      - "30303:30303/udp"
+      - "8545:8545/tcp"
+      - "6060:6060/tcp"
+      - "6060:6060/udp"
+    restart: always

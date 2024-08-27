@@ -1,0 +1,93 @@
+---
+- name: Gather Ethereum node information
+  hosts: ethereum_nodes
+  tasks:
+    - name: Check Ethereum mining status
+      command: docker exec ethereum_ethereum_1 geth --exec "eth.mining" attach /root/.ethereum/geth.ipc
+      register: mining_status
+      ignore_errors: yes
+
+    - name: Print Ethereum mining status
+      debug:
+        msg: "Mining status on {{ inventory_hostname }}: {{ mining_status.stdout }}"
+
+    - name: Check Ethereum block number
+      command: docker exec ethereum_ethereum_1 geth --exec "eth.blockNumber" attach /root/.ethereum/geth.ipc
+      register: block_number
+      ignore_errors: yes
+
+    - name: Print Ethereum block number
+      debug:
+        msg: "Block number on {{ inventory_hostname }}: {{ block_number.stdout }}"
+
+    - name: Check Ethereum latest block number (HEAD)
+      command: docker exec ethereum_ethereum_1 geth --exec "eth.getBlock('latest').number" attach /root/.ethereum/geth.ipc
+      register: latest_block_number
+      ignore_errors: yes
+
+    - name: Print Ethereum latest block number (HEAD)
+      debug:
+        msg: "Latest block number (HEAD) on {{ inventory_hostname }}: {{ latest_block_number.stdout }}"
+
+    - name: Get Ethereum latest block hash (HEAD)
+      command: docker exec ethereum_ethereum_1 geth --exec "eth.getBlock('latest').hash" attach /root/.ethereum/geth.ipc
+      register: latest_block_hash
+      ignore_errors: yes
+
+    - name: Print Ethereum latest block hash (HEAD)
+      debug:
+        msg: "Latest block hash (HEAD) on {{ inventory_hostname }}: {{ latest_block_hash.stdout }}"
+
+    - name: Get Ethereum latest block hash (HEAD) - 2nd run
+      command: docker exec ethereum_ethereum_1 geth --exec "eth.getBlock('latest').hash" attach /root/.ethereum/geth.ipc
+      register: latest_block_hash
+      ignore_errors: yes
+
+    - name: Print Ethereum latest block hash (HEAD) - 2nd run
+      debug:
+        msg: "Latest block hash (HEAD) on {{ inventory_hostname }}: {{ latest_block_hash.stdout }}"
+
+    - name: Check Ethereum peers length
+      command: docker exec ethereum_ethereum_1 geth --exec "admin.peers.length" attach /root/.ethereum/geth.ipc
+      register: peers_length
+      ignore_errors: yes
+
+    - name: Print Ethereum peers length
+      debug:
+        msg: "Peers length on {{ inventory_hostname }}: {{ peers_length.stdout }}"
+
+    - name: List Ethereum peers
+      command: docker exec ethereum_ethereum_1 geth --exec "admin.peers" attach /root/.ethereum/geth.ipc
+      register: peers_list
+      ignore_errors: yes
+
+    - name: Print Ethereum peers list
+      debug:
+        msg: "Peers list on {{ inventory_hostname }}: {{ peers_list.stdout }}"
+
+    - name: Check Ethereum network ID
+      command: docker exec ethereum_ethereum_1 geth --exec "admin.nodeInfo.protocols.eth.network" attach /root/.ethereum/geth.ipc
+      register: network_id
+      ignore_errors: yes
+
+    - name: Print Ethereum network ID
+      debug:
+        msg: "Network ID on {{ inventory_hostname }}: {{ network_id.stdout }}"
+
+    - name: Get Ethereum genesis block hash
+      command: docker exec ethereum_ethereum_1 geth --exec "eth.getBlock(0).hash" attach /root/.ethereum/geth.ipc
+      register: genesis_hash
+      ignore_errors: yes
+
+    - name: Print Ethereum genesis block hash
+      debug:
+        msg: "Genesis block hash on {{ inventory_hostname }}: {{ genesis_hash.stdout }}"
+
+    - name: Get Ethereum enode URL
+      command: docker exec ethereum_ethereum_1 geth --exec "admin.nodeInfo.enode" attach /root/.ethereum/geth.ipc
+      register: enode_url
+      ignore_errors: yes
+
+    - name: Print Ethereum enode URL
+      debug:
+        msg: "Enode URL on {{ inventory_hostname }}: {{ enode_url.stdout }}"

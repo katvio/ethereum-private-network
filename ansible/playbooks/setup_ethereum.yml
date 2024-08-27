@@ -1,0 +1,14 @@
+---
+- hosts: ethereum_nodes
+  gather_facts: yes
+  roles:
+    - common
+    - ethereum
+
+- hosts: ethereum_nodes[1:]
+  tasks:
+    - name: Restart non-bootnode Ethereum nodes
+      docker_compose:
+        project_src: /opt/ethereum
+        state: present
+        restarted: yes

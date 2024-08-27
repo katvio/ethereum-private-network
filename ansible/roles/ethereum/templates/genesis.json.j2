@@ -1,0 +1,28 @@
+{
+  "config": {
+    "chainId": {{ ethereum_network_id }},
+    "homesteadBlock": 0,
+    "eip150Block": 0,
+    "eip155Block": 0,
+    "eip158Block": 0,
+    "byzantiumBlock": 0,
+    "constantinopleBlock": 0,
+    "petersburgBlock": 0,
+    "istanbulBlock": 0,
+    "berlinBlock": 0,
+    "ethash": {}
+  },
+  "coinbase": "0x0000000000000000000000000000000000000000",
+  "difficulty": "0x20000",
+  "extraData": "",
+  "gasLimit": "0x2fefd8",
+  "nonce": "0x0000000000000042",
+  "mixhash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+  "parentHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+  "timestamp": "0x00",
+  "alloc": {
+    "{{ hostvars[groups['ethereum_nodes'][0]]['ethereum_address'] }}": { "balance": "20000000000000000000" },
+    "{{ hostvars[groups['ethereum_nodes'][1]]['ethereum_address'] }}": { "balance": "20000000000000000000" },
+    "{{ hostvars[groups['ethereum_nodes'][2]]['ethereum_address'] }}": { "balance": "20000000000000000000" }
+  }
+}

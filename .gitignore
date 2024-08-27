@@ -1,0 +1,11 @@
+# .gitignore
+.env
+*.tfstate
+*.tfstate.backup
+.terraform/
+terraform/backend.tfvars
+terraform/terraform.tfvars
+*.log
+*.retry
+*tfvars
+.vscode
